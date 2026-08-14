@@ -1,0 +1,380 @@
+local repo = "https://raw.githubusercontent.com/ATLASTEAM01/Obsidian/main/"
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+
+local Window = Library:CreateWindow({ Title = "沙鹰屠服", Footer = "V1", Center = true, AutoShow = true })
+local Tabs = {
+    Main = Window:AddTab("主页", "crosshair"),
+    Target = Window:AddTab("目标", "users")
+}
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Fire = ReplicatedStorage.Remotes.Fire
+local Reload = ReplicatedStorage.Remotes.Reload
+local Players = game.Players
+local player = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local Camera = Workspace.CurrentCamera
+
+local enabled = false
+local connection = nil
+local whitelistNames = {}
+local targetNames = {}
+local useTargetList = false
+local targetAllEnabled = false
+local autoSpectateEnabled = false
+local autoHealEnabled = false
+local platformEnabled = false
+local platform = nil
+local HEAL_POSITION = Vector3.new(731.93, 2386.66, 248.13)
+local DEAGLE_POS = Vector3.new(593.4885864257812, 2387.78173828125, 556.6088256835938)
+local isHealing = false
+local currentTargetIndex = 1
+
+local function getDeagle()
+    return player.Character and player.Character:FindFirstChild("Deagle")
+end
+
+local function hasDeagle()
+    return (player.Backpack:FindFirstChild("Deagle") or (player.Character and player.Character:FindFirstChild("Deagle"))) ~= nil
+end
+
+local function isInList(ply, list)
+    if not ply or #list == 0 then return false end
+    for _, name in ipairs(list) do
+        if ply.DisplayName == name or ply.Name == name then return true end
+    end
+    return false
+end
+
+local function triggerNearbyPrompts()
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("ProximityPrompt") then
+            local parent = obj.Parent
+            local part = parent:IsA("BasePart") and parent or parent:FindFirstChildWhichIsA("BasePart")
+            if part then
+                if (hrp.Position - part.Position).Magnitude <= obj.MaxActivationDistance then
+                    fireproximityprompt(obj)
+                end
+            end
+        end
+    end
+end
+
+local function equipDeagle()
+    if hasDeagle() then
+        if not getDeagle() then
+            local deagle = player.Backpack:FindFirstChild("Deagle")
+            if deagle then deagle.Parent = player.Character end
+        end
+        return true
+    end
+
+    local platformSaved = platformEnabled
+    if platformEnabled then
+        platformEnabled = false
+        if platform then
+            platform:Destroy()
+            platform = nil
+        end
+        task.wait(0.1)
+    end
+
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then
+        if platformSaved then platformEnabled = true end
+        return false
+    end
+    local hrp = char.HumanoidRootPart
+    local oldPos = hrp.CFrame
+    hrp.CFrame = CFrame.new(DEAGLE_POS)
+    task.wait(0.5)
+    triggerNearbyPrompts()
+    task.wait(0.3)
+    hrp.CFrame = oldPos
+
+    if platformSaved then
+        platformEnabled = true
+    end
+
+    if hasDeagle() then
+        local deagle = player.Backpack:FindFirstChild("Deagle") or (player.Character and player.Character:FindFirstChild("Deagle"))
+        if deagle and deagle.Parent ~= player.Character then
+            deagle.Parent = player.Character
+        end
+        return true
+    end
+    return false
+end
+
+local function isTargetAlive(p)
+    if not p then return false end
+    local char = p.Character
+    if not char then return false end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    return humanoid.Health > 0
+end
+
+local function getTargets()
+    local candidates = {}
+    if targetAllEnabled then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player and isTargetAlive(p) and not isInList(p, whitelistNames) then
+                table.insert(candidates, p)
+            end
+        end
+    elseif useTargetList and #targetNames > 0 then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= player and isTargetAlive(p) and isInList(p, targetNames) and not isInList(p, whitelistNames) then
+                table.insert(candidates, p)
+            end
+        end
+    end
+    return candidates
+end
+
+local function getNextTarget()
+    local targets = getTargets()
+    if #targets == 0 then return nil end
+    currentTargetIndex = (currentTargetIndex % #targets) + 1
+    return targets[currentTargetIndex]
+end
+
+local function updateCameraSubject()
+    if autoSpectateEnabled then
+        local targets = getTargets()
+        if #targets > 0 then
+            local idx = math.min(currentTargetIndex, #targets)
+            local t = targets[idx]
+            if t and t.Character and t.Character:FindFirstChildOfClass("Humanoid") then
+                Camera.CameraSubject = t.Character.Humanoid
+                return
+            end
+        end
+    end
+    if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+        Camera.CameraSubject = player.Character.Humanoid
+    end
+end
+
+local function doHeal()
+    if isHealing then return end
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health >= hum.MaxHealth then return end
+    isHealing = true
+
+    local platformSaved = platformEnabled
+    if platformEnabled then
+        platformEnabled = false
+        if platform then
+            platform:Destroy()
+            platform = nil
+        end
+        task.wait(0.1)
+    end
+
+    local root = char.HumanoidRootPart
+    local lastPos = root.CFrame
+    root.CFrame = CFrame.new(HEAL_POSITION)
+    repeat
+        task.wait(0.1)
+        char = player.Character
+        hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then break end
+    until hum.Health >= hum.MaxHealth
+    root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if root then
+        root.CFrame = lastPos
+        root.Velocity = Vector3.zero
+        root.AssemblyLinearVelocity = Vector3.zero
+    end
+
+    if platformSaved then
+        platformEnabled = true
+    end
+
+    isHealing = false
+end
+
+local function updatePlatform()
+    if not platformEnabled or isHealing then
+        if platform then
+            platform:Destroy()
+            platform = nil
+        end
+        return
+    end
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then
+        return
+    end
+    if not platform or not platform.Parent then
+        platform = Instance.new("Part")
+        platform.Name = "DeaglePlatform"
+        platform.Size = Vector3.new(30, 2, 30)
+        platform.Position = Vector3.new(10000, 5000, 10000)
+        platform.Anchored = true
+        platform.Material = Enum.Material.Neon
+        platform.Color = Color3.fromRGB(255, 150, 0)
+        platform.Parent = Workspace
+    end
+    local timeTick = os.clock() * 50
+    platform.CFrame = CFrame.new(10000 + math.sin(timeTick * 0.05) * 500, 5000, 10000 + math.cos(timeTick * 0.05) * 500)
+    local root = char.HumanoidRootPart
+    if root and (root.Position - platform.Position).Magnitude > 40 then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+        root.CFrame = platform.CFrame + Vector3.new(0, 4, 0)
+        root.Velocity = Vector3.zero
+        root.AssemblyLinearVelocity = Vector3.zero
+    end
+end
+
+local function shoot()
+    if isHealing then return end
+    local deagle = getDeagle()
+    if not deagle then return end
+    local char = player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return end
+
+    if autoHealEnabled and hum.Health < hum.MaxHealth then
+        doHeal()
+        return
+    end
+
+    updateCameraSubject()
+
+    local t = getNextTarget()
+    if not t then return end
+
+    local head = t.Character and t.Character:FindFirstChild("Head")
+    if not head then return end
+
+    local muzzle = deagle:FindFirstChild("Muzzle") or deagle:FindFirstChild("Barrel") or deagle:FindFirstChild("Handle")
+    local origin = muzzle and muzzle.Position or char.HumanoidRootPart.Position
+
+    local direction = (head.Position - origin).Unit
+    Fire:FireServer(deagle, "Fire", {
+        velocity = 2000,
+        direction = direction,
+        bullet = ReplicatedStorage.Models.Bullets.Default,
+        origin = origin
+    })
+    Fire:FireServer(deagle, "Hit", {
+        normal = -direction,
+        bullet_cframe = CFrame.lookAt(head.Position, head.Position + direction),
+        hit = head,
+        velocity = direction * 2000,
+        position = origin
+    })
+
+    pcall(function() Reload:InvokeServer(deagle) end)
+end
+
+player.CharacterAdded:Connect(function(char)
+    if not enabled then return end
+
+    task.spawn(function()
+        task.wait(1)
+        local success = equipDeagle()
+        if not success then
+            task.wait(2)
+            success = equipDeagle()
+        end
+        if not success then
+            task.wait(3)
+            success = equipDeagle()
+        end
+    end)
+end)
+
+local MainGroup = Tabs.Main:AddLeftGroupbox("沙鹰设置")
+MainGroup:AddToggle("EnableToggle", { Text = "自动开枪", Default = false }):OnChanged(function(v)
+    enabled = v
+    if v then
+        if not equipDeagle() then
+            Library:Notify("拿沙鹰失败！", 3)
+            enabled = false
+            return
+        end
+        if connection then connection:Disconnect() end
+        connection = RunService.Heartbeat:Connect(function()
+            shoot()
+        end)
+    else
+        if connection then
+            connection:Disconnect()
+            connection = nil
+        end
+    end
+end)
+MainGroup:AddToggle("TargetAllToggle", { Text = "全图杀", Default = false }):OnChanged(function(v)
+    targetAllEnabled = v
+end)
+MainGroup:AddToggle("SpectateToggle", { Text = "自动观战", Default = false }):OnChanged(function(v)
+    autoSpectateEnabled = v
+    if not v then
+        if player.Character and player.Character:FindFirstChildOfClass("Humanoid") then
+            Camera.CameraSubject = player.Character.Humanoid
+        end
+    end
+end)
+MainGroup:AddToggle("HealToggle", { Text = "自动回血", Default = false }):OnChanged(function(v)
+    autoHealEnabled = v
+end)
+MainGroup:AddToggle("PlatformToggle", { Text = "超级远高空板", Default = false }):OnChanged(function(v)
+    platformEnabled = v
+    if not v and platform then
+        platform:Destroy()
+        platform = nil
+    end
+end)
+
+local TargetGroup = Tabs.Target:AddLeftGroupbox("目标选择")
+TargetGroup:AddToggle("UseTargetToggle", { Text = "启用指定目标", Default = false }):OnChanged(function(v)
+    useTargetList = v
+end)
+local targetDropdown = TargetGroup:AddDropdown("TargetDropdown", { Text = "指定目标", Default = {}, Values = {}, Multi = true })
+targetDropdown:OnChanged(function(v)
+    targetNames = targetDropdown:GetActiveValues() or {}
+end)
+
+local WhitelistGroup = Tabs.Target:AddLeftGroupbox("白名单")
+local whitelistDropdown = WhitelistGroup:AddDropdown("WhitelistDropdown", { Text = "白名单", Default = {}, Values = {}, Multi = true })
+whitelistDropdown:OnChanged(function(v)
+    whitelistNames = whitelistDropdown:GetActiveValues() or {}
+end)
+
+local function refreshPlayerLists()
+    local playerNames = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player then
+            table.insert(playerNames, p.DisplayName)
+        end
+    end
+    targetDropdown:SetValues(playerNames)
+    whitelistDropdown:SetValues(playerNames)
+end
+refreshPlayerLists()
+Players.PlayerAdded:Connect(refreshPlayerLists)
+Players.PlayerRemoving:Connect(function() task.wait(0.1); refreshPlayerLists() end)
+task.spawn(function() while true do refreshPlayerLists(); task.wait(1) end end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        updatePlatform()
+    end
+end)
