@@ -3,13 +3,13 @@ local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 
 local Window = Library:CreateWindow({ Title = "沙鹰屠服", Footer = "V1", Center = true, AutoShow = true })
 local Tabs = {
-    Disclaimer = Window:AddTab("免责声明", "warning"),
+    Disclaimer = Window:AddTab("提出建议", "warning"),
     Main = Window:AddTab("主页", "crosshair"),
     Target = Window:AddTab("目标", "users")
 }
 
-local DisclaimerGroup = Tabs.Disclaimer:AddLeftGroupbox("死妈之人")
-DisclaimerGroup:AddLabel("wdSJ140你妈了个逼的还有Krgolden你是不是傻逼我操你妈的我是作者你还不信你是弱智不")
+local DisclaimerGroup = Tabs.Disclaimer:AddLeftGroupbox("提出建议")
+DisclaimerGroup:AddLabel("VDme_js或者mejs作者的昵称遇到我如果有什么建议请提出")
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Fire = ReplicatedStorage.Remotes.Fire
